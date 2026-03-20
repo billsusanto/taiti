@@ -1,7 +1,4 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
+// Prisma schema for Taiti - Game Points Tracker
 
 generator client {
   provider = "prisma-client"
@@ -10,4 +7,87 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Core models for game tracking
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  games         Game[]
+  playerScores  PlayerScore[]
+}
+
+model Game {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  rules       Json?    // Store game rules as JSON
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  ownerId      String
+  owner        User         @relation(fields: [ownerId], references: [id])
+  players      Player[]
+  rounds       Round[]
+  playerScores PlayerScore[]
+}
+
+model Player {
+  id        String   @id @default(cuid())
+  name      String
+  gameId    String
+  createdAt DateTime @default(now())
+
+  // Relations
+  game         Game          @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  scores       Score[]
+  playerScores PlayerScore[]
+}
+
+model Round {
+  id        String   @id @default(cuid())
+  number    Int
+  gameId    String
+  notes     String?
+  createdAt DateTime @default(now())
+
+  // Relations
+  game   Game    @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  scores Score[]
+}
+
+model Score {
+  id        String   @id @default(cuid())
+  points    Int
+  roundId   String
+  playerId  String
+  createdAt DateTime @default(now())
+
+  // Relations
+  round  Round  @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+}
+
+// For games with team scoring
+model PlayerScore {
+  id        String   @id @default(cuid())
+  totalPoints Int    @default(0)
+  rank      Int?
+  gameId    String
+  userId    String
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([gameId, userId])
 }
