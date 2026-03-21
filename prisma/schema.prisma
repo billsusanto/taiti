@@ -7,7 +7,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 // Core models for game tracking
@@ -27,8 +26,7 @@ model User {
 model Game {
   id          String   @id @default(cuid())
   name        String
-  description String?
-  rules       Json?    // Store game rules as JSON
+  maxPlayers  Int      @default(4)  // 4 for now, 3 in future
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -43,6 +41,7 @@ model Game {
 model Player {
   id        String   @id @default(cuid())
   name      String
+  position  Int      // 1, 2, 3, 4
   gameId    String
   createdAt DateTime @default(now())
 
@@ -56,7 +55,7 @@ model Round {
   id        String   @id @default(cuid())
   number    Int
   gameId    String
-  notes     String?
+  winnerId  String?  // Player who won (0 cards)
   createdAt DateTime @default(now())
 
   // Relations
@@ -65,29 +64,33 @@ model Round {
 }
 
 model Score {
-  id        String   @id @default(cuid())
-  points    Int
-  roundId   String
-  playerId  String
-  createdAt DateTime @default(now())
+  id               String   @id @default(cuid())
+  cardsLeft        Int      // X = total cards left
+  twosLeft         Int      // N = number of "2" cards
+  calculatedPoints Int      // (X - N + N*5) * multiplier
+  multiplier       Int      // 1, 2, 3, or 4
+  roundId          String
+  playerId         String
+  createdAt        DateTime @default(now())
 
   // Relations
   round  Round  @relation(fields: [roundId], references: [id], onDelete: Cascade)
   player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
 }
 
-// For games with team scoring
 model PlayerScore {
-  id        String   @id @default(cuid())
-  totalPoints Int    @default(0)
-  rank      Int?
-  gameId    String
-  userId    String
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(cuid())
+  totalPoints  Int      @default(0)
+  rank         Int?
+  gameId       String
+  playerId     String
+  userId       String?
+  updatedAt    DateTime @updatedAt
 
   // Relations
-  game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
-  user User @relation(fields: [userId], references: [id])
+  game   Game   @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  player Player @relation(fields: [playerId], references: [id])
+  user   User?  @relation(fields: [userId], references: [id])
 
-  @@unique([gameId, userId])
+  @@unique([gameId, playerId])
 }
