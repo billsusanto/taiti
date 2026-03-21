@@ -17,7 +17,7 @@ export async function POST(request: Request) {
       })
     }
 
-    // Create game
+    // Create game with players
     const game = await prisma.game.create({
       data: {
         name,
@@ -29,32 +29,20 @@ export async function POST(request: Request) {
             position: idx + 1,
           })),
         },
-        playerScores: {
-          create: playerNames.map((_: string, idx: number) => ({
-            playerId: '', // Will update after player creation
-            totalPoints: 0,
-          })),
-        },
       },
       include: {
         players: true,
       },
     })
 
-    // Update playerScores with actual playerIds
-    await Promise.all(
-      game.players.map((player) =>
-        prisma.playerScore.update({
-          where: {
-            gameId_playerId: {
-              gameId: game.id,
-              playerId: player.id,
-            },
-          },
-          data: { playerId: player.id },
-        })
-      )
-    )
+    // Create playerScores for each player
+    await prisma.playerScore.createMany({
+      data: game.players.map((player) => ({
+        gameId: game.id,
+        playerId: player.id,
+        totalPoints: 0,
+      })),
+    })
 
     return NextResponse.json({
       id: game.id,
