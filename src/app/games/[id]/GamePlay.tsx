@@ -67,19 +67,19 @@ function FinalCalculationsModal({
   onClose: () => void 
 }) {
   // Calculate final points for each player
-  // Formula: Final Points = Your Score - Each Opponent's Score
-  // Positive = you beat them (you had lower points), Negative = you lost (they had lower points)
+  // Formula: Final Points = Their Score - Your Score (lower score = winner)
+  // Positive = you beat them (you had lower pts), Negative = you lost (they had lower pts)
   const finalPoints = players.map((player) => {
     const differences: { name: string; diff: number; won: boolean }[] = []
     let total = 0
     
     players.forEach((otherPlayer) => {
       if (otherPlayer.id !== player.id) {
-        const diff = player.totalPoints - otherPlayer.totalPoints
+        const diff = otherPlayer.totalPoints - player.totalPoints
         differences.push({ 
           name: otherPlayer.name, 
           diff: Math.abs(diff),
-          won: diff > 0  // You won if your score (lower pts) > their score
+          won: diff > 0  // You won if their score (lower pts) - your score (lower pts) = positive
         })
         total += diff
       }
