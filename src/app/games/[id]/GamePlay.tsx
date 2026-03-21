@@ -58,6 +58,110 @@ function Toast({ message, type, onClose }: { message: string; type: 'error' | 's
   )
 }
 
+// Final Calculations Modal
+function FinalCalculationsModal({ 
+  players, 
+  onClose 
+}: { 
+  players: PlayerScore[]; 
+  onClose: () => void 
+}) {
+  // Sort by totalPoints (lowest first = winner)
+  const sortedPlayers = [...players].sort((a, b) => a.totalPoints - b.totalPoints)
+  
+  // Calculate final points for each player
+  const finalPoints = sortedPlayers.map((player, playerIdx) => {
+    // Sum of differences from all players with higher points
+    const differences: { name: string; diff: number }[] = []
+    let total = 0
+    
+    sortedPlayers.forEach((otherPlayer, otherIdx) => {
+      if (otherPlayer.totalPoints > player.totalPoints) {
+        const diff = otherPlayer.totalPoints - player.totalPoints
+        differences.push({ name: otherPlayer.name, diff })
+        total += diff
+      }
+    })
+    
+    return { ...player, finalPoints: total, differences }
+  })
+
+  // Sort by final points descending for display
+  const finalRankings = [...finalPoints].sort((a, b) => b.finalPoints - a.finalPoints)
+
+  return (
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+      <div className="bg-zinc-800 rounded-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold">🏆 Final Calculations</h2>
+          <button 
+            onClick={onClose}
+            className="p-2 hover:bg-zinc-700 rounded-lg transition-colors"
+          >
+            ✕
+          </button>
+        </div>
+        
+        <p className="text-zinc-400 mb-6 text-sm">
+          Each player&apos;s final points = sum of differences from all players with more points.
+          <br/>
+          <span className="text-yellow-400">Yellow = won from others</span> | <span className="text-zinc-500">Gray = lost to others</span>
+        </p>
+
+        {/* Final Rankings */}
+        <div className="space-y-4 mb-8">
+          {finalRankings.map((player, idx) => (
+            <div key={player.id} className="bg-zinc-700 rounded-lg p-4">
+              <div className="flex justify-between items-center mb-3">
+                <div className="flex items-center gap-3">
+                  <span className="text-3xl">
+                    {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '#' + (idx + 1)}
+                  </span>
+                  <span className="text-xl font-bold">{player.name}</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-3xl font-mono font-bold text-green-400">
+                    {player.finalPoints}
+                  </span>
+                  <span className="text-zinc-500 ml-2">pts</span>
+                </div>
+              </div>
+              
+              {/* Breakdown */}
+              <div className="text-sm text-zinc-400 space-y-1">
+                <div className="font-semibold text-zinc-300">Breakdown:</div>
+                {player.differences.length === 0 ? (
+                  <div className="text-zinc-500 italic">Lost to all players</div>
+                ) : (
+                  player.differences.map((d, i) => (
+                    <div key={i} className="flex justify-between">
+                      <span className="text-yellow-400">vs {d.name}</span>
+                      <span className="text-yellow-400">+{d.diff}</span>
+                    </div>
+                  ))
+                )}
+                {player.differences.length > 0 && (
+                  <div className="flex justify-between border-t border-zinc-600 pt-1 mt-2 text-zinc-300">
+                    <span>Total won</span>
+                    <span className="font-bold text-green-400">= {player.finalPoints}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <button
+          onClick={onClose}
+          className="w-full bg-blue-600 hover:bg-blue-500 py-3 rounded-lg font-semibold transition-colors"
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function GamePlay({ gameId }: { gameId: string }) {
   const [game, setGame] = useState<Game | null>(null)
   const [loading, setLoading] = useState(true)
@@ -73,6 +177,9 @@ export default function GamePlay({ gameId }: { gameId: string }) {
   
   // Delete state
   const [deletingRoundId, setDeletingRoundId] = useState<string | null>(null)
+  
+  // Final calculations modal
+  const [showFinalCalc, setShowFinalCalc] = useState(false)
 
   useEffect(() => {
     fetchGame()
@@ -305,6 +412,14 @@ export default function GamePlay({ gameId }: { gameId: string }) {
       )}
       
       <div className="max-w-4xl mx-auto">
+        {/* Final Calculations Modal */}
+        {showFinalCalc && game && (
+          <FinalCalculationsModal 
+            players={game.players} 
+            onClose={() => setShowFinalCalc(false)} 
+          />
+        )}
+        
         {/* Header */}
         <div className="flex justify-between items-center mb-8">
           <div>
@@ -325,7 +440,17 @@ export default function GamePlay({ gameId }: { gameId: string }) {
         <div className="space-y-6">
           {/* Scoreboard */}
           <div className="bg-zinc-800 rounded-xl p-4">
-            <h3 className="text-lg font-semibold mb-4">Scoreboard</h3>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Scoreboard</h3>
+              {game.rounds.length > 0 && (
+                <button
+                  onClick={() => setShowFinalCalc(true)}
+                  className="px-4 py-2 bg-yellow-600 hover:bg-yellow-500 rounded-lg font-semibold text-sm transition-colors"
+                >
+                  🏆 Final Calculations
+                </button>
+              )}
+            </div>
             <div className="space-y-2">
               {sortedPlayers.map((player, idx) => (
                 <div
