@@ -66,19 +66,21 @@ function FinalCalculationsModal({
   players: PlayerScore[]; 
   onClose: () => void 
 }) {
-  // Sort by totalPoints (lowest first = winner)
-  const sortedPlayers = [...players].sort((a, b) => a.totalPoints - b.totalPoints)
-  
   // Calculate final points for each player
-  const finalPoints = sortedPlayers.map((player, playerIdx) => {
-    // Sum of differences from all players with higher points
-    const differences: { name: string; diff: number }[] = []
+  // Formula: Final Points = Your Score - Each Opponent's Score
+  // Positive = you beat them (you had lower points), Negative = you lost (they had lower points)
+  const finalPoints = players.map((player) => {
+    const differences: { name: string; diff: number; won: boolean }[] = []
     let total = 0
     
-    sortedPlayers.forEach((otherPlayer, otherIdx) => {
-      if (otherPlayer.totalPoints > player.totalPoints) {
-        const diff = otherPlayer.totalPoints - player.totalPoints
-        differences.push({ name: otherPlayer.name, diff })
+    players.forEach((otherPlayer) => {
+      if (otherPlayer.id !== player.id) {
+        const diff = player.totalPoints - otherPlayer.totalPoints
+        differences.push({ 
+          name: otherPlayer.name, 
+          diff: Math.abs(diff),
+          won: diff > 0  // You won if your score (lower pts) > their score
+        })
         total += diff
       }
     })
@@ -103,49 +105,50 @@ function FinalCalculationsModal({
         </div>
         
         <p className="text-zinc-400 mb-6 text-sm">
-          Each player&apos;s final points = sum of differences from all players with more points.
+          Final points = Your Score - Opponent&apos;s Score (vs each player)
           <br/>
-          <span className="text-yellow-400">Yellow = won from others</span> | <span className="text-zinc-500">Gray = lost to others</span>
+          <span className="text-green-400">Green = won (opponent had more points)</span> | <span className="text-red-400">Red = lost (opponent had fewer points)</span>
         </p>
 
         {/* Final Rankings */}
         <div className="space-y-4 mb-8">
           {finalRankings.map((player, idx) => (
-            <div key={player.id} className="bg-zinc-700 rounded-lg p-4">
+            <div key={player.id} className={`rounded-lg p-4 ${idx === 0 ? 'bg-yellow-900/30 border-2 border-yellow-500' : 'bg-zinc-700'}`}>
               <div className="flex justify-between items-center mb-3">
                 <div className="flex items-center gap-3">
                   <span className="text-3xl">
                     {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '#' + (idx + 1)}
                   </span>
                   <span className="text-xl font-bold">{player.name}</span>
+                  <span className="text-sm text-zinc-500">({player.totalPoints} pts)</span>
                 </div>
                 <div className="text-right">
-                  <span className="text-3xl font-mono font-bold text-green-400">
-                    {player.finalPoints}
+                  <span className={`text-3xl font-mono font-bold ${
+                    player.finalPoints > 0 ? 'text-green-400' : player.finalPoints < 0 ? 'text-red-400' : 'text-zinc-400'
+                  }`}>
+                    {player.finalPoints > 0 ? '+' : ''}{player.finalPoints}
                   </span>
                   <span className="text-zinc-500 ml-2">pts</span>
                 </div>
               </div>
               
               {/* Breakdown */}
-              <div className="text-sm text-zinc-400 space-y-1">
-                <div className="font-semibold text-zinc-300">Breakdown:</div>
-                {player.differences.length === 0 ? (
-                  <div className="text-zinc-500 italic">Lost to all players</div>
-                ) : (
-                  player.differences.map((d, i) => (
-                    <div key={i} className="flex justify-between">
-                      <span className="text-yellow-400">vs {d.name}</span>
-                      <span className="text-yellow-400">+{d.diff}</span>
-                    </div>
-                  ))
-                )}
-                {player.differences.length > 0 && (
-                  <div className="flex justify-between border-t border-zinc-600 pt-1 mt-2 text-zinc-300">
-                    <span>Total won</span>
-                    <span className="font-bold text-green-400">= {player.finalPoints}</span>
+              <div className="text-sm space-y-1">
+                <div className="font-semibold text-zinc-300 mb-2">Breakdown:</div>
+                {player.differences.map((d, i) => (
+                  <div key={i} className={`flex justify-between ${d.won ? 'text-green-400' : 'text-red-400'}`}>
+                    <span>vs {d.name} ({d.won ? 'won' : 'lost'})</span>
+                    <span className="font-mono">{d.won ? '+' : '-'}{d.diff}</span>
                   </div>
-                )}
+                ))}
+                <div className="flex justify-between border-t border-zinc-600 pt-2 mt-2 text-zinc-300 font-bold">
+                  <span>Total</span>
+                  <span className={
+                    player.finalPoints > 0 ? 'text-green-400' : player.finalPoints < 0 ? 'text-red-400' : 'text-zinc-400'
+                  }>
+                    {player.finalPoints > 0 ? '+' : ''}{player.finalPoints}
+                  </span>
+                </div>
               </div>
             </div>
           ))}
