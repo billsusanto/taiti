@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { calculatePoints, WINNER_POINTS } from '@/lib/scoring'
 
@@ -40,12 +39,19 @@ interface Game {
 }
 
 export default function GamePlay({ gameId }: { gameId: string }) {
-  const router = useRouter()
   const [game, setGame] = useState<Game | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [roundInputs, setRoundInputs] = useState<{ cards: number; twos: number }[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
+  
+  // Edit state
+  const [editingRoundId, setEditingRoundId] = useState<string | null>(null)
+  const [editInputs, setEditInputs] = useState<{ cards: number; twos: number }[]>([])
+  const [isUpdating, setIsUpdating] = useState(false)
+  
+  // Delete state
+  const [deletingRoundId, setDeletingRoundId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchGame()
@@ -110,20 +116,8 @@ export default function GamePlay({ gameId }: { gameId: string }) {
         throw new Error('Failed to submit round')
       }
       
-      const data = await res.json()
-
-      // Update local state
-      const updatedPlayers = game.players.map((p, idx) => ({
-        ...p,
-        totalPoints: p.totalPoints + scores[idx].points,
-      }))
-
-      setGame({
-        ...game,
-        players: updatedPlayers,
-        rounds: [...game.rounds, { id: data.id, number: game.currentRound, winnerId: winnerIndex >= 0 ? game.players[winnerIndex].id : null, createdAt: new Date().toISOString(), scores }],
-        currentRound: game.currentRound + 1,
-      })
+      // Refresh game data
+      await fetchGame()
 
       // Reset inputs
       setRoundInputs(game.players.map(() => ({ cards: 0, twos: 0 })))
@@ -132,6 +126,108 @@ export default function GamePlay({ gameId }: { gameId: string }) {
       alert('Failed to submit round. Please try again.')
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  const startEditRound = (round: Round) => {
+    if (!game) return
+    setEditingRoundId(round.id)
+    // Initialize edit inputs from round scores
+    const inputs = game.players.map(player => {
+      const score = round.scores.find(s => s.playerId === player.id)
+      return {
+        cards: score?.cardsLeft ?? 0,
+        twos: score?.twosLeft ?? 0,
+      }
+    })
+    setEditInputs(inputs)
+  }
+
+  const cancelEdit = () => {
+    setEditingRoundId(null)
+    setEditInputs([])
+  }
+
+  const saveEditRound = async (roundId: string) => {
+    if (!game) return
+    setIsUpdating(true)
+
+    try {
+      // Find winner (player with 0 cards)
+      const winnerIndex = editInputs.findIndex(i => i.cards === 0)
+      
+      // Calculate points for each player
+      const scores: RoundScore[] = game.players.map((player, idx) => {
+        const { points: calculatedPoints, multiplier } = calculatePoints(
+          editInputs[idx].cards,
+          editInputs[idx].twos
+        )
+        
+        // Winner gets -10, others get calculated points
+        const finalPoints = idx === winnerIndex ? WINNER_POINTS : calculatedPoints
+        
+        return {
+          playerId: player.id,
+          cardsLeft: editInputs[idx].cards,
+          twosLeft: editInputs[idx].twos,
+          points: finalPoints,
+          multiplier,
+        }
+      })
+
+      const round = game.rounds.find(r => r.id === roundId)
+
+      // Submit to API
+      const res = await fetch(`/api/games/${game.id}/rounds/${roundId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roundNumber: round?.number ?? 1,
+          winnerId: winnerIndex >= 0 ? game.players[winnerIndex].id : null,
+          scores,
+        }),
+      })
+      
+      if (!res.ok) {
+        throw new Error('Failed to update round')
+      }
+      
+      // Refresh game data
+      await fetchGame()
+      setEditingRoundId(null)
+      setEditInputs([])
+    } catch (err) {
+      console.error('Failed to update round:', err)
+      alert('Failed to update round. Please try again.')
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
+  const deleteRound = async (roundId: string) => {
+    if (!game) return
+    if (!confirm('Are you sure you want to delete this round? Scores will be recalculated.')) {
+      return
+    }
+    
+    setDeletingRoundId(roundId)
+
+    try {
+      const res = await fetch(`/api/games/${game.id}/rounds/${roundId}`, {
+        method: 'DELETE',
+      })
+      
+      if (!res.ok) {
+        throw new Error('Failed to delete round')
+      }
+      
+      // Refresh game data
+      await fetchGame()
+    } catch (err) {
+      console.error('Failed to delete round:', err)
+      alert('Failed to delete round. Please try again.')
+    } finally {
+      setDeletingRoundId(null)
     }
   }
 
@@ -280,25 +376,117 @@ export default function GamePlay({ gameId }: { gameId: string }) {
           {game.rounds.length > 0 && (
             <div className="bg-zinc-800 rounded-xl p-4">
               <h3 className="text-lg font-semibold mb-4">Round History</h3>
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {[...game.rounds].reverse().map((round) => (
-                  <div key={round.id} className="bg-zinc-700 rounded-lg p-3">
-                    <div className="text-sm text-zinc-400 mb-2">Round {round.number}</div>
-                    <div className="grid grid-cols-4 gap-2 text-sm">
-                      {round.scores.map((score) => {
-                        const player = game.players.find(p => p.id === score.playerId)
-                        return (
-                          <div key={score.playerId} className="text-center">
-                            <div className="text-zinc-400">{player?.name}</div>
-                            <div className={`font-mono font-bold ${
-                              score.points === WINNER_POINTS ? 'text-green-400' : 'text-zinc-200'
-                            }`}>
-                              {score.points === WINNER_POINTS ? 'WIN' : score.points}
-                            </div>
+                  <div key={round.id} className="bg-zinc-700 rounded-lg p-4">
+                    {/* Edit Mode */}
+                    {editingRoundId === round.id ? (
+                      <div className="space-y-4">
+                        <div className="flex justify-between items-center">
+                          <h4 className="font-semibold text-blue-400">Editing Round {round.number}</h4>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={cancelEdit}
+                              className="px-3 py-1 text-sm bg-zinc-600 hover:bg-zinc-500 rounded-lg transition-colors"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={() => saveEditRound(round.id)}
+                              disabled={isUpdating}
+                              className="px-3 py-1 text-sm bg-green-600 hover:bg-green-500 disabled:bg-zinc-600 rounded-lg transition-colors"
+                            >
+                              {isUpdating ? 'Saving...' : 'Save'}
+                            </button>
                           </div>
-                        )
-                      })}
-                    </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          {game.players.map((player, idx) => (
+                            <div key={player.id} className="space-y-2">
+                              <div className="text-center font-semibold text-sm">{player.name}</div>
+                              <div>
+                                <label className="block text-xs text-zinc-400 mb-1">Cards (X)</label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="13"
+                                  value={editInputs[idx]?.cards ?? 0}
+                                  onChange={(e) => {
+                                    const newInputs = [...editInputs]
+                                    newInputs[idx] = { ...newInputs[idx], cards: parseInt(e.target.value) || 0 }
+                                    setEditInputs(newInputs)
+                                  }}
+                                  onFocus={(e) => e.target.select()}
+                                  className="w-full bg-zinc-600 rounded px-2 py-1 text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs text-zinc-400 mb-1">&quot;2&quot;s (N)</label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="13"
+                                  value={editInputs[idx]?.twos ?? 0}
+                                  onChange={(e) => {
+                                    const newInputs = [...editInputs]
+                                    newInputs[idx] = { ...newInputs[idx], twos: parseInt(e.target.value) || 0 }
+                                    setEditInputs(newInputs)
+                                  }}
+                                  onFocus={(e) => e.target.select()}
+                                  className="w-full bg-zinc-600 rounded px-2 py-1 text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                />
+                              </div>
+                              <div className="text-xs text-center text-zinc-400">
+                                Preview: {calculatePoints(editInputs[idx]?.cards || 0, editInputs[idx]?.twos || 0).points} pts
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      /* View Mode */
+                      <>
+                        <div className="flex justify-between items-center mb-3">
+                          <div className="text-sm text-zinc-400">
+                            Round {round.number}
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => startEditRound(round)}
+                              className="px-3 py-1 text-xs bg-zinc-600 hover:bg-zinc-500 rounded-lg transition-colors"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => deleteRound(round.id)}
+                              disabled={deletingRoundId === round.id}
+                              className="px-3 py-1 text-xs bg-red-600/50 hover:bg-red-600 disabled:bg-zinc-600 rounded-lg transition-colors"
+                            >
+                              {deletingRoundId === round.id ? 'Deleting...' : 'Delete'}
+                            </button>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-4 gap-2 text-sm">
+                          {round.scores.map((score) => {
+                            const player = game.players.find(p => p.id === score.playerId)
+                            return (
+                              <div key={score.playerId} className="text-center">
+                                <div className="text-zinc-400">{player?.name}</div>
+                                <div className={`font-mono font-bold ${
+                                  score.points === WINNER_POINTS ? 'text-green-400' : 'text-zinc-200'
+                                }`}>
+                                  {score.points === WINNER_POINTS ? 'WIN' : score.points}
+                                </div>
+                                <div className="text-xs text-zinc-500">
+                                  {score.cardsLeft} cards, {score.twosLeft} 2s
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </>
+                    )}
                   </div>
                 ))}
               </div>
