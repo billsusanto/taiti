@@ -67,17 +67,49 @@ export async function GET() {
   try {
     const games = await prisma.game.findMany({
       include: {
-        players: true,
+        players: {
+          include: {
+            playerScores: true,
+          },
+        },
         rounds: {
           include: {
             scores: true,
           },
+          orderBy: { number: 'desc' },
+        },
+        playerScores: {
+          orderBy: { rank: 'asc' },
         },
       },
       orderBy: { createdAt: 'desc' },
     })
 
-    return NextResponse.json(games)
+    // Calculate currentRound and totalPoints for each game
+    const gamesWithScores = games.map(game => {
+      // Calculate totalPoints from rounds
+      const playerScoresMap = new Map<string, number>()
+      game.players.forEach(p => playerScoresMap.set(p.id, 0))
+      
+      game.rounds.forEach(round => {
+        round.scores.forEach(score => {
+          const current = playerScoresMap.get(score.playerId) || 0
+          playerScoresMap.set(score.playerId, current + score.calculatedPoints)
+        })
+      })
+
+      return {
+        ...game,
+        currentRound: game.rounds.length + 1,
+        players: game.players.map(p => ({
+          ...p,
+          totalPoints: playerScoresMap.get(p.id) || 0,
+          rank: game.playerScores.find(ps => ps.playerId === p.id)?.rank || null,
+        })),
+      }
+    })
+
+    return NextResponse.json(gamesWithScores)
   } catch (error) {
     console.error('Failed to fetch games:', error)
     return NextResponse.json({ error: 'Failed to fetch games' }, { status: 500 })

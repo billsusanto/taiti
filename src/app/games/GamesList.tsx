@@ -75,11 +75,8 @@ export default function GamesList() {
       setExpandedGame(null)
     } else {
       setExpandedGame(gameId)
-      // Check if we already have full details
-      const game = games.find(g => g.id === gameId)
-      if (game && (!game.rounds || game.rounds.length === 0)) {
-        await fetchGameDetails(gameId)
-      }
+      // Always fetch full details to get calculated totalPoints and ranks
+      await fetchGameDetails(gameId)
     }
   }
 
