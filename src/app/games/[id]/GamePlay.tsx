@@ -38,12 +38,33 @@ interface Game {
   rounds: Round[]
 }
 
+// Toast component
+function Toast({ message, type, onClose }: { message: string; type: 'error' | 'success'; onClose: () => void }) {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 4000)
+    return () => clearTimeout(timer)
+  }, [onClose])
+
+  return (
+    <div className={`fixed top-4 right-4 z-50 px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 animate-slide-in ${
+      type === 'error' ? 'bg-red-600' : 'bg-green-600'
+    }`}>
+      <span className="text-xl">{type === 'error' ? '⚠️' : '✅'}</span>
+      <span className="font-medium">{message}</span>
+      <button onClick={onClose} className="ml-4 text-white/70 hover:text-white">
+        ✕
+      </button>
+    </div>
+  )
+}
+
 export default function GamePlay({ gameId }: { gameId: string }) {
   const [game, setGame] = useState<Game | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [roundInputs, setRoundInputs] = useState<{ cards: number; twos: number }[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [toast, setToast] = useState<{ message: string; type: 'error' | 'success' } | null>(null)
   
   // Edit state
   const [editingRoundId, setEditingRoundId] = useState<string | null>(null)
@@ -74,8 +95,27 @@ export default function GamePlay({ gameId }: { gameId: string }) {
     }
   }
 
+  // Calculate total twos across all players
+  const totalTwos = roundInputs.reduce((sum, input) => sum + input.twos, 0)
+  const hasTooManyTwos = totalTwos > 4
+
   const submitRound = async () => {
     if (!game) return
+
+    // Validation: Check if total twos exceed 4
+    const totalTwosNow = roundInputs.reduce((sum, input) => sum + input.twos, 0)
+    if (totalTwosNow > 4) {
+      setToast({ message: `Too many "2" cards! You entered ${totalTwosNow}, but there can only be 4 in a deck.`, type: 'error' })
+      return
+    }
+
+    // Validation: Check if winner (0 cards) exists
+    const hasWinner = roundInputs.some(i => i.cards === 0)
+    if (!hasWinner) {
+      setToast({ message: 'One player must have 0 cards (the winner).', type: 'error' })
+      return
+    }
+
     setIsSubmitting(true)
 
     try {
@@ -259,6 +299,11 @@ export default function GamePlay({ gameId }: { gameId: string }) {
 
   return (
     <div className="min-h-screen bg-zinc-900 text-white p-4">
+      {/* Toast notifications */}
+      {toast && (
+        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
+      )}
+      
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="flex justify-between items-center mb-8">
@@ -363,10 +408,17 @@ export default function GamePlay({ gameId }: { gameId: string }) {
               ))}
             </div>
 
+            {/* Warning for too many 2s */}
+            {hasTooManyTwos && (
+              <div className="mt-4 p-3 bg-red-600/20 border border-red-600/50 rounded-lg text-sm text-red-400">
+                ⚠️ You entered {totalTwos} "2" cards total. Maximum allowed is 4. Please correct before submitting.
+              </div>
+            )}
+
             <button
               onClick={submitRound}
-              disabled={isSubmitting}
-              className="w-full mt-6 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-600 disabled:cursor-not-allowed rounded-lg py-3 font-semibold transition-colors"
+              disabled={isSubmitting || hasTooManyTwos}
+              className="w-full mt-4 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-600 disabled:cursor-not-allowed rounded-lg py-3 font-semibold transition-colors"
             >
               {isSubmitting ? 'Submitting...' : `Submit Round ${game.currentRound}`}
             </button>
