@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { calculatePoints, WINNER_POINTS, MAX_PLAYERS } from '@/lib/scoring'
 
 interface Player {
@@ -153,6 +154,12 @@ export default function TaitiScoring() {
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold mb-2">🎴 Taiti</h1>
           <p className="text-zinc-400">Game Points Tracker</p>
+          <Link
+            href="/games"
+            className="inline-block mt-3 text-blue-400 hover:text-blue-300 text-sm"
+          >
+            View Past Games →
+          </Link>
         </div>
 
         {/* Create Game Form */}
